@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="no">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>InspeksjonsVakt</title>
+<meta name="theme-color" content="#173f35">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand-mark">IV</div>
+  <div><div class="brand">InspeksjonsVakt</div><div class="tagline">Din personlige inspeksjonsoversikt</div></div>
+  <span class="version">v1.1.0</span>
+</header>
+<main>
+  <section class="welcome">
+    <div>
+      <p class="eyebrow">SKOLEHVERDAGEN, LITT ENKLERE</p>
+      <h1>Vet du hvor du skal<br><em>ha inspeksjon?</em></h1>
+      <p class="intro">Last inn skolens inspeksjonsplan, velg navnet ditt og få oversikt over neste vakt.</p>
+    </div>
+    <div class="hero-icon" aria-hidden="true">◷</div>
+  </section>
+
+  <section class="panel" id="setupPanel">
+    <div class="section-head"><div><span class="step">01</span><h2>Legg inn inspeksjonsplan</h2></div><span class="soft-label">PDF</span></div>
+    <label class="upload" for="pdfInput">
+      <span class="upload-icon">↑</span>
+      <strong>Velg PDF-fil</strong>
+      <span>Last opp skolens inspeksjonsplan</span>
+      <input id="pdfInput" type="file" accept="application/pdf,.pdf">
+    </label>
+    <p id="fileStatus" class="hint">PDF-ens tekst blir forsøkt lest automatisk. Kontroller alltid resultatet.</p>
+    <div id="extractArea" class="extract-area hidden">
+      <label for="extractedText">Tekst lest fra PDF</label>
+      <textarea id="extractedText" rows="5" placeholder="PDF-tekst vises her..."></textarea>
+      <div class="actions">
+        <button id="parseBtn" class="primary">Hent inspeksjoner fra tekst</button>
+        <button id="clearTextBtn" class="secondary">Tøm</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <div class="section-head"><div><span class="step">02</span><h2>Velg deg selv</h2></div></div>
+    <div class="select-row">
+      <select id="personSelect" aria-label="Velg navn"><option value="">Velg navn fra planen</option></select>
+      <button id="favoriteBtn" class="star-btn" title="Lagre som favoritt" aria-label="Lagre navn som favoritt">☆</button>
+    </div>
+    <p class="hint">Favorittnavnet lagres på denne enheten.</p>
+  </section>
+
+  <section class="dashboard hidden" id="dashboard">
+    <div class="dash-head"><div><p class="eyebrow">DIN NESTE INSPEKSJON</p><h2 id="nextDate">—</h2></div><div class="clock-icon">◷</div></div>
+    <div class="next-card">
+      <div class="time" id="nextTime">—</div>
+      <div class="area-label">INSPEKSJONSOMRÅDE</div>
+      <div class="area" id="nextArea">—</div>
+      <div class="countdown" id="countdown"></div>
+    </div>
+    <div class="week-panel">
+      <div class="week-head">
+        <div><p class="eyebrow">UKEPLAN</p><h3 id="weekTitle">Denne uken</h3></div>
+        <div class="week-nav">
+          <button id="prevWeek" class="week-arrow" aria-label="Forrige uke">‹</button>
+          <button id="currentWeek" class="week-today">Denne uken</button>
+          <button id="nextWeek" class="week-arrow" aria-label="Neste uke">›</button>
+        </div>
+      </div>
+      <div id="weekGrid" class="week-grid"></div>
+    </div>
+    <div class="section-head schedule-heading"><div><span class="step">03</span><h2>Dine kommende inspeksjoner</h2></div></div>
+    <div id="scheduleList" class="schedule-list"></div>
+  </section>
+
+  <section class="panel editor-panel">
+    <div class="section-head"><div><span class="step">04</span><h2>Kontroller inspeksjonene</h2></div><button id="addRowBtn" class="small secondary">＋ Legg til</button></div>
+    <p class="hint">Avlesning fra PDF kan være unøyaktig. Her kan du rette eller legge inn vakter manuelt. Dato og klokkeslett må være tydelig.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Dato</th><th>Fra</th><th>Til</th><th>Navn</th><th>Område</th><th></th></tr></thead>
+        <tbody id="inspectionRows"></tbody>
+      </table>
+    </div>
+    <div class="actions">
+      <button id="saveBtn" class="primary">Lagre inspeksjonsplan</button>
+      <button id="exportBtn" class="secondary">Eksporter plan (JSON)</button>
+      <label class="import-btn secondary">Importer plan<input id="jsonInput" type="file" accept=".json,application/json"></label>
+    </div>
+    <p id="saveStatus" class="hint"></p>
+  </section>
+  <footer>InspeksjonsVakt <span>•</span> v1.1.0 <span>•</span> Data lagres lokalt i nettleseren</footer>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs" type="module"></script>
+<script src="app.js" type="module"></script>
+</body>
+</html>
