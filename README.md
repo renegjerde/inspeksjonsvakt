@@ -1,29 +1,47 @@
-# InspeksjonsVakt v1.1.0
+# InspeksjonsVakt v1.2.0
 
-En enkel, mobilvennlig webapp for å finne neste inspeksjon på skolen.
+Mobilvennlig webapp for å vise den enkeltes inspeksjoner, med ukesoversikt og neste inspeksjon.
 
-## Nytt i v1.1.0\n- Personlig ukeplan med inspeksjoner mandag–søndag.\n- Naviger mellom uker, eller gå tilbake til denne uken.\n- «Din neste inspeksjon» vises separat øverst.\n\n## Kom i gang
-1. Pakk ut ZIP-filen.
-2. Åpne `index.html` i en nettleser, eller publiser mappen via GitHub Pages.
-3. Last opp skolens PDF-inspeksjonsplan.
-4. Kontroller/juster avleste inspeksjoner i tabellen.
-5. Lagre planen, velg navnet ditt og trykk stjernen for favoritt.
+## Innhold
+- `index.html` – appens side
+- `styles.css` – design og mobiltilpasning
+- `app.js` – logikk, ukevisning og PDF-lesing
+- `plan.json` – inspeksjonsplanen som er lest fra PDF-en fra 19.10.2026
 
-## Publisering via GitHub Pages
-- Opprett et GitHub-repository.
-- Last opp alle filene i denne mappen til repositoryets rot.
-- Gå til **Settings → Pages**.
-- Velg **Deploy from a branch**, `main` og `/ (root)`.
-- Lagre. GitHub gir deg publiseringsadressen.
+## Hva er nytt i v1.2.0
+- Ukeplan for valgt ansatt, mandag–fredag.
+- Tydelig felt for **Din neste inspeksjon** med dato, tidspunkt og område.
+- Favorittvalg av ansatt lagres lokalt i nettleseren.
+- Den opplastede inspeksjonsplanen fra 19.10.2026 er lest inn som utgangspunkt.
+- Admin-del for å laste opp ny PDF med samme tabellmal.
+- PDF-avlesning, kontroll av ukjente koder og eksport av ny `plan.json`.
+- Alternasjon mellom partalls- og oddetallsuker for koder med skråstrek.
 
-## Viktig om PDF
-PDF-tekst blir hentet med PDF.js via CDN, så første opplasting krever internettilgang.
-PDF-er som består av skannede bilder uten tekstlag, eller tabeller med komplisert oppsett,
-kan ikke tolkes pålitelig i denne første versjonen. Brukeren kan rette og legge inn rader
-manuelt. Ikke legg inn elevopplysninger eller andre sensitive data.
+## Publiser via GitHub Pages
+1. Opprett et repository på GitHub.
+2. Pakk ut ZIP-filen og last opp alle fire filene til repositoryets rot.
+3. Velg **Settings → Pages → Deploy from a branch**.
+4. Velg `main` og `/ (root)`, og trykk **Save**.
+5. Åpne GitHub Pages-adressen som vises i Pages-innstillingene.
 
-## Data og begrensninger
-- Inspeksjonsplan og favoritt lagres lokalt i nettleseren på enheten.
-- Dette er ikke en delt løsning: hver enhet må få lastet inn samme plan.
-- Første parser er en forsiktig tekstbasert prøve, ikke en fullverdig OCR-/tabellgjenkjenner.
-- Versjon: 1.0.0
+## Oppdatere inspeksjonsplanen
+1. Åpne appen og fold ut **Administrasjon**.
+2. Velg ny PDF og sett mandagen planen gjelder fra.
+3. Velg **Les PDF og erstatt plan**.
+4. Kontroller ukeplanen og løs eventuelle ukjente ansattkoder i administrasjonen.
+5. Velg **Last ned plan.json**.
+6. Erstatt `plan.json` i GitHub-repositoryet med den nedlastede filen og publiser commit.
+
+Appen forventer at nye PDF-er følger samme tabelloppsett som PDF-en den er tilpasset. Skannede PDF-er uten tekstlag, eller planer med en annen kolonneplassering, vil ikke kunne leses automatisk. Kontroller alltid resultatet før publisering.
+
+## Hvordan dato og uker tolkes
+Filnavnet på den opplastede PDF-en angir at planen gjelder fra mandag 19.10.2026. Ukesplanen gjentas fra denne datoen. Ved koder skrevet som `XXXX/YYYY` er første kode tolket som partallsuke og andre kode som oddetallsuke, i tråd med merknaden i originaldokumentet. Kontroller denne tolkningen med skolens planansvarlige.
+
+## Viktig om personvern og deling
+`plan.json` inneholder ansattes navn, inspeksjonsområder og tidspunkt. GitHub Pages på et offentlig repository gjør filene tilgjengelige for alle på internett. Ikke publiser denne planen offentlig uten uttrykkelig godkjenning fra skolen. Denne versjonen har ikke brukerkontoer, tilgangsstyring eller passordbeskyttelse. For ordinær intern bruk bør skolen velge en løsning med innlogging og tilgangskontroll.
+
+## Begrensninger
+- Data og favorittnavn oppdateres i nettleseren; favoritten er enhets-/nettleserbasert.
+- PDF-opplasting erstatter planen i gjeldende nettleserøkt. For å dele planen med alle må administrator laste ned og erstatte `plan.json` i GitHub.
+- Tre koder i den opplastede PDF-en – `BIRO`, `LIET` og `ROLT` – finnes ikke i navneoversikten. De må avklares og fylles inn i administrasjonen.
+- `FLYT1` og `FLYT2` vises med områdebeskrivelsene fra merknaden i PDF-en: Fotballbanen/Fana og Fana/Paradis.

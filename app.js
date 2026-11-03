@@ -1,160 +1,318 @@
-const STORAGE_KEY = "inspeksjonsvakt-v1";\nlet weekOffset = 0;
-const $ = id => document.getElementById(id);
-let inspections = [];
-let favorite = localStorage.getItem("iv-favorite") || "";
-let pdfjs = null;
+const FAVORITE_KEY = "inspeksjonsvakt-favorite-v12";
+const DAY_NAMES = ["Mandag", "Tirsdag", "Onsdag", "Torsdag", "Fredag"];
+const AREAS = [
+  "Paradis øvre", "Paradis nedre", "Bakplass", "Fana øvre", "Fana nedre",
+  "Lekeplass", "Bingen", "Fotballbanen", "S1", "C1", "L1", "M1",
+  "A2", "B2", "A3", "L3", "F5", "OM6", "FLYT1", "FLYT2"
+];
+const AREA_CENTERS = [107.88,146.53,176.98,203.84,236.00,269.73,300.05,335.27,371.75,403.20,434.77,466.33,497.89,527.95,556.52,583.96,608.80,638.86,674.80,708.23];
+const MERGED_CENTERS = [
+  {center:126.25, area:"Paradis øvre + Paradis nedre"},
+  {center:221.20, area:"Fana øvre + Fana nedre"}
+];
+let plan = null;
+let selectedPdf = null;
+let weekOffset = 0;
 
-async function loadPdfJs(){
-  if(!pdfjs){
-    try { pdfjs = await import("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs"); }
-    catch(e){ console.warn("PDF.js could not load",e); }
+const $ = id => document.getElementById(id);
+const escapeHtml = value => String(value ?? "").replace(/[&<>"']/g, ch => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[ch]));
+
+function localDateKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
+}
+function parseLocalDate(value) {
+  const [year,month,day] = value.split("-").map(Number);
+  return new Date(year,month-1,day,0,0,0,0);
+}
+function mondayOf(date) {
+  const result = new Date(date.getFullYear(),date.getMonth(),date.getDate());
+  result.setDate(result.getDate() - ((result.getDay()+6)%7));
+  return result;
+}
+function isoWeekNumber(date) {
+  const d = new Date(Date.UTC(date.getFullYear(),date.getMonth(),date.getDate()));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+  return Math.ceil((((d-yearStart)/86400000)+1)/7);
+}
+function dateAtTime(date,time) {
+  const [hours,minutes] = time.split(":").map(Number);
+  return new Date(date.getFullYear(),date.getMonth(),date.getDate(),hours,minutes,0,0);
+}
+function getActiveCode(entry, date) {
+  if (!entry.codes?.length) return "";
+  if (entry.codes.length === 1) return entry.codes[0];
+  const evenWeek = isoWeekNumber(date) % 2 === 0;
+  return evenWeek ? entry.codes[0] : entry.codes[1];
+}
+function assignmentsForDate(date) {
+  const day = (date.getDay()+6)%7;
+  const key = localDateKey(date);
+  if (plan.startDate && key < plan.startDate) return [];
+  return (plan.entries || []).filter(entry => entry.day === day).map(entry => ({...entry, code:getActiveCode(entry,date)}));
+}
+function areaLabel(entry) {
+  if (entry.area === "FLYT1") return "FLYT1 · Fotballbanen/Fana";
+  if (entry.area === "FLYT2") return "FLYT2 · Fana/Paradis";
+  return entry.area;
+}
+function nameFor(code) {
+  return plan.staff?.[code] || `Ukjent kode: ${code}`;
+}
+function sortItems(items) {
+  return items.sort((a,b) => a.start.localeCompare(b.start) || a.area.localeCompare(b.area,"no"));
+}
+function getStaffCodes() {
+  return Object.keys(plan?.staff || {}).sort((a,b) => plan.staff[a].localeCompare(plan.staff[b],"no"));
+}
+function getUnknownCodes() {
+  return [...new Set((plan?.entries || []).flatMap(e => e.codes || []))].filter(code => !plan.staff?.[code]).sort();
+}
+function renderMeta() {
+  const updated = plan.updatedOn ? parseLocalDate(plan.updatedOn).toLocaleDateString("no-NO") : "ukjent dato";
+  const effective = plan.startDate ? parseLocalDate(plan.startDate).toLocaleDateString("no-NO") : "ikke angitt";
+  $("planMeta").textContent = `Plan oppdatert ${updated} · gjelder fra ${effective}`;
+  $("startDateInput").value = plan.startDate || "2026-10-19";
+}
+function renderPersonSelect() {
+  const select = $("personSelect");
+  const current = select.value || localStorage.getItem(FAVORITE_KEY) || "";
+  const codes = getStaffCodes();
+  select.innerHTML = '<option value="">Velg navnet ditt …</option>' + codes.map(code =>
+    `<option value="${escapeHtml(code)}">${escapeHtml(plan.staff[code])}</option>`
+  ).join("");
+  if (codes.includes(current)) select.value = current;
+  $("favoriteBtn").textContent = select.value && select.value === localStorage.getItem(FAVORITE_KEY) ? "★" : "☆";
+}
+function renderUnknownCodes() {
+  const unknown = getUnknownCodes();
+  $("unknownNotice").classList.toggle("hidden",unknown.length===0);
+  $("unknownText").textContent = unknown.length
+    ? `${unknown.join(", ")} finnes i inspeksjonstabellen, men ikke i navneoversikten nederst i PDF-en. De vises som uavklarte til navnet er lagt inn i administrasjonen.`
+    : "Alle ansattkodene i planen har et navneoppslag.";
+  $("unknownEditor").innerHTML = unknown.map(code => `
+    <div class="unknown-field"><label for="map-${escapeHtml(code)}">${escapeHtml(code)}</label>
+      <input id="map-${escapeHtml(code)}" data-code="${escapeHtml(code)}" type="text" placeholder="Skriv inn fullt navn" value="">
+    </div>`).join("") || '<p class="small-note">Ingen ukjente koder.</p>';
+}
+function personEntriesForDate(date, code) {
+  return sortItems(assignmentsForDate(date).filter(item => item.code === code));
+}
+function findNextInspection(code) {
+  if (!code) return null;
+  const now = new Date();
+  const start = parseLocalDate(plan.startDate || "2000-01-01");
+  const firstDate = new Date(Math.max(now.getTime(),start.getTime()));
+  for (let offset=0; offset<370; offset++) {
+    const day = new Date(firstDate.getFullYear(),firstDate.getMonth(),firstDate.getDate()+offset);
+    for (const item of personEntriesForDate(day,code)) {
+      const startTime = dateAtTime(day,item.start);
+      const endTime = dateAtTime(day,item.end || item.start);
+      if (endTime >= now) return {date:day,item,startTime,endTime,isOngoing:startTime<=now && endTime>=now};
+    }
   }
-  return pdfjs;
+  return null;
 }
-function esc(s){return String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));}
-function saveLocal(){
-  localStorage.setItem(STORAGE_KEY,JSON.stringify(inspections));
-  $("saveStatus").textContent = `Lagret ${inspections.length} inspeksjon(er) på denne enheten.`;
-  render();
+function renderNext(code) {
+  const next = findNextInspection(code);
+  if (!next) {
+    $("nextDate").textContent = "Ingen kommende inspeksjon";
+    $("nextTime").textContent = "—";
+    $("nextArea").textContent = "Ingen inspeksjon registrert";
+    $("countdown").textContent = "Det er ingen flere kommende inspeksjoner i planen.";
+    return;
+  }
+  $("nextDate").textContent = next.date.toLocaleDateString("no-NO",{weekday:"long",day:"numeric",month:"long"});
+  $("nextTime").textContent = `${next.item.start}–${next.item.end || next.item.start}`;
+  $("nextArea").textContent = areaLabel(next.item);
+  if (next.isOngoing) {
+    $("countdown").textContent = "Inspeksjonen pågår nå.";
+  } else {
+    const minutes = Math.max(0,Math.round((next.startTime-new Date())/60000));
+    $("countdown").textContent = minutes < 1 ? "Starter nå" : minutes < 60 ? `Starter om ${minutes} min` : `Starter om ${Math.floor(minutes/60)} t ${minutes%60} min`;
+  }
 }
-function renderRows(){
-  const body=$("inspectionRows");
-  body.innerHTML="";
-  inspections.forEach((x,i)=>{
-    const tr=document.createElement("tr");
-    tr.innerHTML=`<td><input type="date" data-i="${i}" data-k="date" value="${esc(x.date)}"></td>
-      <td><input type="time" data-i="${i}" data-k="start" value="${esc(x.start)}"></td>
-      <td><input type="time" data-i="${i}" data-k="end" value="${esc(x.end)}"></td>
-      <td><input type="text" data-i="${i}" data-k="name" value="${esc(x.name)}" placeholder="Navn"></td>
-      <td><input type="text" data-i="${i}" data-k="area" value="${esc(x.area)}" placeholder="Område"></td>
-      <td><button class="delete" data-delete="${i}" aria-label="Slett inspeksjon">×</button></td>`;
-    body.appendChild(tr);
-  });
-  body.querySelectorAll("input").forEach(inp=>inp.addEventListener("change",e=>{
-    const i=+e.target.dataset.i,k=e.target.dataset.k; inspections[i][k]=e.target.value; refreshNames(); render();
-  }));
-  body.querySelectorAll("[data-delete]").forEach(btn=>btn.addEventListener("click",()=>{inspections.splice(+btn.dataset.delete,1);renderRows();refreshNames();render();}));
-}
-function refreshNames(){
-  const names=[...new Set(inspections.map(x=>x.name.trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"no"));
-  const select=$("personSelect"), current=select.value || favorite;
-  select.innerHTML='<option value="">Velg navn fra planen</option>'+names.map(n=>`<option value="${esc(n)}">${esc(n)}</option>`).join("");
-  if(names.includes(current)) select.value=current;
-  $("favoriteBtn").textContent=select.value===favorite && favorite ? "★":"☆";
-}
-function dateTime(x){return new Date(`${x.date}T${x.start || "00:00"}:00`);}
-function mondayOf(date){
-  const d=new Date(date); d.setHours(0,0,0,0);
-  const day=(d.getDay()+6)%7; d.setDate(d.getDate()-day); return d;
-}
-function dateKey(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;}
-function renderWeek(name){
-  const base=mondayOf(new Date());base.setDate(base.getDate()+weekOffset*7);
-  const end=new Date(base);end.setDate(base.getDate()+6);
-  const fmt=d=>d.toLocaleDateString("no-NO",{day:"numeric",month:"short"});
-  $("weekTitle").textContent=weekOffset===0?"Denne uken":`${fmt(base)} – ${fmt(end)}`;
-  const days=["Mandag","Tirsdag","Onsdag","Torsdag","Fredag","Lørdag","Søndag"];
-  const records=inspections.filter(x=>x.name===name);
-  $("weekGrid").innerHTML=days.map((day,i)=>{
-    const d=new Date(base);d.setDate(base.getDate()+i);
-    const key=dateKey(d), entries=records.filter(x=>x.date===key).sort((a,b)=>(a.start||"").localeCompare(b.start||""));
-    const today=dateKey(new Date())===key;
-    return `<div class="week-day ${today?"is-today":""}"><div class="week-day-head"><span>${day}</span><strong>${d.getDate()}</strong></div>
-      ${entries.length?entries.map(x=>`<div class="week-event"><b>${esc(x.start||"—")}${x.end?"–"+esc(x.end):""}</b><span>${esc(x.area||"Område mangler")}</span></div>`).join(""):'<div class="week-empty">Fri</div>'}
-    </div>`;
+function renderWeek(code) {
+  const base = mondayOf(new Date());
+  base.setDate(base.getDate()+weekOffset*7);
+  const finish = new Date(base); finish.setDate(finish.getDate()+4);
+  const formatShort = date => date.toLocaleDateString("no-NO",{day:"numeric",month:"short"});
+  $("weekTitle").textContent = weekOffset === 0 ? "Denne uken" : `${formatShort(base)} – ${formatShort(finish)}`;
+  $("weekGrid").innerHTML = DAY_NAMES.map((dayName,index) => {
+    const date = new Date(base); date.setDate(base.getDate()+index);
+    const entries = personEntriesForDate(date,code);
+    const isToday = localDateKey(date) === localDateKey(new Date());
+    const insidePlan = !plan.startDate || localDateKey(date) >= plan.startDate;
+    const inner = !insidePlan ? "Planen har ikke startet" : entries.length ? entries.map(item =>
+      `<div class="week-event"><b>${escapeHtml(item.start)}–${escapeHtml(item.end || "")}</b><span>${escapeHtml(areaLabel(item))}</span></div>`
+    ).join("") : '<div class="week-empty">Ingen inspeksjon</div>';
+    return `<div class="week-day ${isToday?"is-today":""}"><div class="week-day-head"><span>${dayName}</span><strong>${date.getDate()}</strong></div>${inner}</div>`;
   }).join("");
 }
-function render(){
-  const name=$("personSelect").value;
-  const now=new Date();
-  const mine=inspections.filter(x=>x.name===name && x.date && x.start).sort((a,b)=>dateTime(a)-dateTime(b));
-  const future=mine.filter(x=>dateTime(x)>=now);
-  $("dashboard").classList.toggle("hidden",!name);
-  if(!name)return;
-  const next=future[0];
-  if(!next){
-    $("nextDate").textContent="Ingen kommende inspeksjon";
-    $("nextTime").textContent="—";$("nextArea").textContent="Planen er oppdatert?";
-    $("countdown").textContent=mine.length?"Du har ingen flere inspeksjoner i den innlagte planen.":"Det er ikke registrert inspeksjoner for deg ennå.";
-  }else{
-    const dt=dateTime(next);
-    $("nextDate").textContent=dt.toLocaleDateString("no-NO",{weekday:"long",day:"numeric",month:"long"});
-    $("nextTime").textContent=`${next.start}–${next.end || "?"}`;
-    $("nextArea").textContent=next.area || "Område ikke oppgitt";
-    const mins=Math.max(0,Math.round((dt-now)/60000));
-    $("countdown").textContent=mins<1?"Inspeksjonen starter nå":mins<60?`Starter om ${mins} min`:`Starter om ${Math.floor(mins/60)} t ${mins%60} min`;
+function renderUpcoming(code) {
+  const items = [];
+  const now = new Date();
+  for (let offset=0; offset<45 && items.length<8; offset++) {
+    const day = new Date(now.getFullYear(),now.getMonth(),now.getDate()+offset);
+    for (const item of personEntriesForDate(day,code)) {
+      const endTime = dateAtTime(day,item.end || item.start);
+      if (endTime >= now) items.push({date:day,item});
+    }
   }
-  renderWeek(name);
-  $("scheduleList").innerHTML=future.slice(0,8).map(x=>`<div class="schedule-item"><div class="schedule-date">${dateTime(x).toLocaleDateString("no-NO",{weekday:"short",day:"numeric",month:"short"})}</div><div><div class="schedule-time">${esc(x.start)}–${esc(x.end||"")} · ${esc(x.name)}</div><div class="schedule-area">${esc(x.area||"Område ikke oppgitt")}</div></div></div>`).join("") || '<p class="hint">Ingen kommende inspeksjoner.</p>';
+  $("upcomingList").innerHTML = items.length ? items.map(({date,item}) => `
+    <div class="upcoming-item"><div class="upcoming-date">${date.toLocaleDateString("no-NO",{weekday:"short",day:"numeric",month:"short"})}</div>
+      <div><div class="upcoming-time">${escapeHtml(item.start)}–${escapeHtml(item.end || "")}</div><div class="upcoming-area">${escapeHtml(areaLabel(item))}</div></div>
+    </div>`).join("") : '<p class="small-note">Ingen kommende inspeksjoner er registrert.</p>';
 }
-$("prevWeek").addEventListener("click",()=>{weekOffset--;render();});
-$("nextWeek").addEventListener("click",()=>{weekOffset++;render();});
-$("currentWeek").addEventListener("click",()=>{weekOffset=0;render();});
-$("personSelect").addEventListener("change",render);
-$("favoriteBtn").addEventListener("click",()=>{
-  favorite=$("personSelect").value;
-  if(!favorite){$("saveStatus").textContent="Velg et navn først.";return;}
-  localStorage.setItem("iv-favorite",favorite);$("favoriteBtn").textContent="★";$("saveStatus").textContent=`${favorite} er lagret som favoritt.`;
-});
-$("addRowBtn").addEventListener("click",()=>{inspections.push({date:"",start:"",end:"",name:$("personSelect").value||"",area:""});renderRows();refreshNames();});
-$("saveBtn").addEventListener("click",saveLocal);
-$("clearTextBtn").addEventListener("click",()=>{$("extractedText").value="";});
-$("pdfInput").addEventListener("change",async e=>{
-  const file=e.target.files[0];if(!file)return;
-  $("fileStatus").textContent=`Laster ${file.name} …`;
-  $("extractArea").classList.remove("hidden");
-  try{
-    const lib=await loadPdfJs();
-    if(!lib)throw new Error("PDF-leseren kunne ikke lastes. Sjekk internettilkoblingen.");
-    const bytes=await file.arrayBuffer();
-    const pdf=await lib.getDocument({data:bytes}).promise;
-    let text="";
-    for(let p=1;p<=pdf.numPages;p++){
-      const page=await pdf.getPage(p),content=await page.getTextContent();
-      text+=content.items.map(it=>it.str).join(" ")+"\\n";
-    }
-    $("extractedText").value=text;
-    $("fileStatus").textContent=`${file.name} – ${pdf.numPages} side(r) lest. Kontroller teksten under.`;
-  }catch(err){$("fileStatus").textContent=err.message||"Kunne ikke lese PDF-en. Du kan legge inn inspeksjonene manuelt."; }
-});
-$("parseBtn").addEventListener("click",()=>{
-  const raw=$("extractedText").value.trim();
-  if(!raw){$("saveStatus").textContent="Fant ingen tekst å behandle.";return;}
-  // General first-pass parser: lines resembling date/time/name/area are suggested.
-  // PDF layouts vary; all generated rows remain editable.
-  const lines=raw.split(/\n/).map(s=>s.trim()).filter(Boolean);
-  const found=[];
-  const dateRe=/(\d{4}-\d{2}-\d{2}|\d{1,2}[./]\d{1,2}[./]\d{2,4})/;
-  const timeRe=/(\d{1,2}[:.]\d{2})/g;
-  for(const line of lines){
-    const d=line.match(dateRe),ts=[...line.matchAll(timeRe)];
-    if(!d||ts.length<1)continue;
-    let date=d[1],m;
-    if(/^\d{1,2}[./]/.test(date)){
-      const parts=date.split(/[./]/);let year=parts[2];if(year.length===2)year="20"+year;
-      date=`${year}-${parts[1].padStart(2,"0")}-${parts[0].padStart(2,"0")}`;
-    }
-    const start=ts[0][1].replace(".",":").padStart(5,"0");
-    const end=ts[1]?.[1]?.replace(".",":").padStart(5,"0")||"";
-    let remainder=line.replace(d[1],"").replace(timeRe,"").replace(/[|,;–—-]+/g," ").trim();
-    const parts=remainder.split(/\s{2,}/).filter(Boolean);
-    const name=parts[0]||"";
-    const area=parts.slice(1).join(" ")||remainder.replace(name,"").trim();
-    found.push({date,start,end,name,area});
+function renderDashboard() {
+  const code = $("personSelect").value;
+  $("dashboard").classList.toggle("hidden",!code);
+  if (!code) return;
+  renderNext(code);
+  renderWeek(code);
+  renderUpcoming(code);
+}
+function renderAll() {
+  renderMeta();
+  renderPersonSelect();
+  renderUnknownCodes();
+  renderDashboard();
+}
+
+async function loadPlan() {
+  const response = await fetch("./plan.json",{cache:"no-store"});
+  if (!response.ok) throw new Error(`Kunne ikke hente plan.json (HTTP ${response.status}).`);
+  const data = await response.json();
+  validatePlan(data);
+  return data;
+}
+function validatePlan(data) {
+  if (!data || !Array.isArray(data.entries) || !data.staff || !data.startDate) {
+    throw new Error("plan.json mangler nødvendige data (entries, staff eller startDate). ");
   }
-  if(found.length){inspections=found;renderRows();refreshNames();render();$("saveStatus").textContent=`Fant ${found.length} mulige rad(er). Kontroller navn, dato og område før du lagrer.`;}
-  else $("saveStatus").textContent="Fant ikke en sikker struktur i PDF-teksten. Legg inn vaktene manuelt i tabellen.";
+  if (!data.entries.length) throw new Error("Inspeksjonsplanen inneholder ingen inspeksjoner.");
+}
+
+$("personSelect").addEventListener("change",() => {
+  $("favoriteBtn").textContent = $("personSelect").value === localStorage.getItem(FAVORITE_KEY) ? "★" : "☆";
+  renderDashboard();
 });
-$("exportBtn").addEventListener("click",()=>{
-  const blob=new Blob([JSON.stringify({version:"1.0.0",inspections},null,2)],{type:"application/json"});
-  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="inspeksjonsplan.json";a.click();URL.revokeObjectURL(a.href);
+$("favoriteBtn").addEventListener("click",() => {
+  const code = $("personSelect").value;
+  if (!code) return;
+  localStorage.setItem(FAVORITE_KEY,code);
+  $("favoriteBtn").textContent = "★";
 });
-$("jsonInput").addEventListener("change",async e=>{
-  const f=e.target.files[0];if(!f)return;
-  try{const data=JSON.parse(await f.text());inspections=Array.isArray(data)?data:data.inspections||[];renderRows();refreshNames();render();$("saveStatus").textContent="Plan importert. Trykk «Lagre inspeksjonsplan» for å lagre lokalt.";}
-  catch(err){$("saveStatus").textContent="Kunne ikke importere JSON-filen.";}
+$("prevWeek").addEventListener("click",() => { weekOffset--; renderDashboard(); });
+$("nextWeek").addEventListener("click",() => { weekOffset++; renderDashboard(); });
+$("currentWeek").addEventListener("click",() => { weekOffset=0; renderDashboard(); });
+
+$("pdfInput").addEventListener("change",event => {
+  selectedPdf = event.target.files?.[0] || null;
+  $("pdfFileName").textContent = selectedPdf?.name || "Ingen fil valgt";
+  $("parsePdfBtn").disabled = !selectedPdf;
+  $("parseStatus").textContent = "";
 });
-try{inspections=JSON.parse(localStorage.getItem(STORAGE_KEY)||"[]");}catch{inspections=[]}
-renderRows();refreshNames();
-if(favorite && [...new Set(inspections.map(x=>x.name))].includes(favorite))$("personSelect").value=favorite;
-render();
+
+function textCenter(item, pageWidth) {
+  const x = item.transform?.[4] ?? 0;
+  const width = item.width ?? 0;
+  return ((x + width/2) / pageWidth) * 792;
+}
+function classifyArea(center) {
+  for (const merged of MERGED_CENTERS) {
+    if (Math.abs(center-merged.center)<3.3) return merged.area;
+  }
+  const idx = AREA_CENTERS.reduce((best,value,index) => Math.abs(value-center)<Math.abs(AREA_CENTERS[best]-center) ? index : best,0);
+  return AREAS[idx];
+}
+function normalizedTime(value) { return value.replaceAll(".",":"); }
+async function readPdfSchedule(file) {
+  const pdfjs = await import("https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs");
+  pdfjs.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.worker.min.mjs";
+  const pdf = await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+  const page = await pdf.getPage(1);
+  const viewport = page.getViewport({scale:1});
+  const textContent = await page.getTextContent();
+  const items = textContent.items.filter(item => typeof item.str === "string" && item.str.trim());
+  const dayTokens = new Set(DAY_NAMES);
+  const timeTokens = items.filter(item => /^\d{2}[.:]\d{2}-\d{2}[.:]\d{2}$/.test(item.str.trim()));
+  if (!timeTokens.length) throw new Error("Fant ingen klokkeslett-rader. PDF-en kan være skannet som bilde eller ha et annet tabelloppsett.");
+  const parsed = [];
+  for (const timeItem of timeTokens) {
+    const y = timeItem.transform?.[5] ?? 0;
+    const timeX = timeItem.transform?.[4] ?? 0;
+    const dayItem = items.filter(item => dayTokens.has(item.str.trim()) && (item.transform?.[4] ?? 999) < timeX && Math.abs((item.transform?.[5] ?? 9999)-y)<3.5)
+      .sort((a,b)=>Math.abs((a.transform?.[5]??0)-y)-Math.abs((b.transform?.[5]??0)-y))[0];
+    if (!dayItem) continue;
+    const timeParts = timeItem.str.trim().split("-").map(normalizedTime);
+    const codesOnRow = items.filter(item => {
+      const str = item.str.trim();
+      const x = textCenter(item,viewport.width);
+      const rowY = item.transform?.[5] ?? 0;
+      return x>88 && x<726 && Math.abs(rowY-y)<2.4 && /^[A-ZÆØÅ0-9]{3,8}(?:\/[A-ZÆØÅ0-9]{3,8})?$/.test(str);
+    });
+    const assignments = codesOnRow.map(item => {
+      const raw = item.str.trim();
+      const codes = raw.split("/");
+      return {day:DAY_NAMES.indexOf(dayItem.str.trim()),start:timeParts[0],end:timeParts[1],area:classifyArea(textCenter(item,viewport.width)),codes,alternating:codes.length===2};
+    });
+    if (assignments.length) parsed.push(...assignments);
+  }
+  if (!parsed.length) throw new Error("Fant klokkeslett, men klarte ikke å koble dem til inspeksjonskoder. Kontroller at PDF-en bruker samme tabellmal.");
+  const updatedToken = items.find(item => /^\d{1,2}\.\d{1,2}\.\d{4}$/.test(item.str.trim()));
+  const updatedOn = updatedToken ? (() => { const [d,m,y]=updatedToken.str.trim().split("."); return `${y}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`; })() : plan.updatedOn;
+  return {entries:parsed,updatedOn,pageCount:pdf.numPages};
+}
+
+$("parsePdfBtn").addEventListener("click",async () => {
+  if (!selectedPdf) return;
+  const startDate = $("startDateInput").value;
+  if (!startDate) { $("parseStatus").textContent = "Velg datoen planen gjelder fra."; return; }
+  if (parseLocalDate(startDate).getDay() !== 1) { $("parseStatus").textContent = "Startdatoen må være en mandag."; return; }
+  const button = $("parsePdfBtn");
+  button.disabled = true; button.textContent = "Leser PDF …";
+  try {
+    const result = await readPdfSchedule(selectedPdf);
+    plan = {...plan,entries:result.entries,startDate,updatedOn:result.updatedOn || plan.updatedOn,source:selectedPdf.name,version:"1.2.0"};
+    renderAll();
+    const unknown = getUnknownCodes();
+    $("parseStatus").textContent = `Leste ${result.entries.length} inspeksjonsoppføringer fra ${result.pageCount} side(r). ${unknown.length ? `Uavklarte koder: ${unknown.join(", ")}.` : "Alle koder har navneoppslag."}\nKontroller ukeplanen, korriger eventuelle navnekoder og last ned plan.json når den er klar.`;
+  } catch (error) {
+    $("parseStatus").textContent = error.message || "Kunne ikke lese PDF-filen.";
+  } finally {
+    button.disabled = false; button.textContent = "Les PDF og erstatt plan";
+  }
+});
+
+$("saveNamesBtn").addEventListener("click",() => {
+  const inputs = [...$("unknownEditor").querySelectorAll("input[data-code]")];
+  let count = 0;
+  for (const input of inputs) {
+    const name = input.value.trim();
+    if (name) { plan.staff[input.dataset.code] = name; count++; }
+  }
+  renderAll();
+  $("parseStatus").textContent = count ? `Lagret ${count} navneoppslag. Husk å laste ned plan.json for å publisere endringene.` : "Ingen nye navneoppslag ble lagt inn.";
+});
+
+$("exportPlanBtn").addEventListener("click",() => {
+  const blob = new Blob([JSON.stringify(plan,null,2)],{type:"application/json;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a"); link.href=url; link.download="plan.json"; link.click();
+  URL.revokeObjectURL(url);
+  $("parseStatus").textContent = "plan.json er lastet ned. Erstatt den gamle plan.json-filen i GitHub og publiser endringen.";
+});
+$("restorePlanBtn").addEventListener("click",async () => {
+  if (!confirm("Forkaste endringene i denne økten og hente plan.json fra GitHub på nytt?")) return;
+  try { plan=await loadPlan(); weekOffset=0; renderAll(); $("parseStatus").textContent="Planen fra GitHub er lastet inn på nytt."; }
+  catch(error) { $("parseStatus").textContent=error.message; }
+});
+
+try {
+  plan = await loadPlan();
+  renderAll();
+} catch (error) {
+  $("planMeta").textContent = "Kunne ikke laste plan.json. Publiser både index.html, app.js, styles.css og plan.json i samme GitHub-mappe.";
+  $("parseStatus").textContent = error.message;
+}
