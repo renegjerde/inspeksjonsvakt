@@ -1,6 +1,6 @@
-# InspeksjonsVakt v1.2.0
+# InspeksjonsVakt v1.2.1
 
-Mobilvennlig webapp for å vise den enkeltes inspeksjoner, med ukesoversikt og neste inspeksjon.
+Mobilvennlig webapp for å vise den enkeltes inspeksjoner, med ukeoversikt og neste inspeksjon.
 
 ## Innhold
 - `index.html` – appens side
@@ -8,11 +8,15 @@ Mobilvennlig webapp for å vise den enkeltes inspeksjoner, med ukesoversikt og n
 - `app.js` – logikk, ukevisning og PDF-lesing
 - `plan.json` – inspeksjonsplanen som er lest fra PDF-en fra 19.10.2026
 
-## Hva er nytt i v1.2.0
-- Ukeplan for valgt ansatt, mandag–fredag.
+## Hva er nytt i v1.2.1
+- Lagt til de bekreftede navneoppslagene `BIRO` = Oda Birkeland, `LIET` = Tore Lie og `ROLT` = Tone Roll.
+- Alle ansattkodene i den innlastede inspeksjonsplanen har nå et navneoppslag.
+- Versjonsnummer oppdatert til v1.2.1.
+
+## Funksjoner i appen
+- Personlig ukeplan mandag–fredag for valgt ansatt.
 - Tydelig felt for **Din neste inspeksjon** med dato, tidspunkt og område.
 - Favorittvalg av ansatt lagres lokalt i nettleseren.
-- Den opplastede inspeksjonsplanen fra 19.10.2026 er lest inn som utgangspunkt.
 - Admin-del for å laste opp ny PDF med samme tabellmal.
 - PDF-avlesning, kontroll av ukjente koder og eksport av ny `plan.json`.
 - Alternasjon mellom partalls- og oddetallsuker for koder med skråstrek.
@@ -43,5 +47,4 @@ Filnavnet på den opplastede PDF-en angir at planen gjelder fra mandag 19.10.202
 ## Begrensninger
 - Data og favorittnavn oppdateres i nettleseren; favoritten er enhets-/nettleserbasert.
 - PDF-opplasting erstatter planen i gjeldende nettleserøkt. For å dele planen med alle må administrator laste ned og erstatte `plan.json` i GitHub.
-- Tre koder i den opplastede PDF-en – `BIRO`, `LIET` og `ROLT` – finnes ikke i navneoversikten. De må avklares og fylles inn i administrasjonen.
 - `FLYT1` og `FLYT2` vises med områdebeskrivelsene fra merknaden i PDF-en: Fotballbanen/Fana og Fana/Paradis.

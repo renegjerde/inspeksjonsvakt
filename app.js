@@ -274,7 +274,7 @@ $("parsePdfBtn").addEventListener("click",async () => {
   button.disabled = true; button.textContent = "Leser PDF …";
   try {
     const result = await readPdfSchedule(selectedPdf);
-    plan = {...plan,entries:result.entries,startDate,updatedOn:result.updatedOn || plan.updatedOn,source:selectedPdf.name,version:"1.2.0"};
+    plan = {...plan,entries:result.entries,startDate,updatedOn:result.updatedOn || plan.updatedOn,source:selectedPdf.name,version:"1.2.1"};
     renderAll();
     const unknown = getUnknownCodes();
     $("parseStatus").textContent = `Leste ${result.entries.length} inspeksjonsoppføringer fra ${result.pageCount} side(r). ${unknown.length ? `Uavklarte koder: ${unknown.join(", ")}.` : "Alle koder har navneoppslag."}\nKontroller ukeplanen, korriger eventuelle navnekoder og last ned plan.json når den er klar.`;

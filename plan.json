@@ -1,5 +1,5 @@
 {
-  "version": "1.2.0",
+  "version": "1.2.1",
   "school": "InspeksjonsVakt",
   "updatedOn": "2026-10-14",
   "startDate": "2026-10-19",
@@ -64,7 +64,10 @@
     "TORH": "Torheim, Hans Slettebak",
     "TRAE": "Træen, Elisabeth",
     "ØKLS": "Økland, Silje",
-    "ØYSE": "Øysæd, Elisabeth"
+    "ØYSE": "Øysæd, Elisabeth",
+    "LIET": "Tore Lie",
+    "ROLT": "Tone Roll",
+    "BIRO": "Oda Birkeland"
   },
   "areas": [
     "Paradis øvre",
@@ -2522,10 +2525,5 @@
       "alternating": false
     }
   ],
-  "source": "Inspeksjonsplan fra 19.10.26 – Ferdigstilt med samlet fotballbane.pdf",
-  "unknownCodes": [
-    "BIRO",
-    "LIET",
-    "ROLT"
-  ]
+  "source": "Inspeksjonsplan fra 19.10.26 – Ferdigstilt med samlet fotballbane.pdf"
 }
