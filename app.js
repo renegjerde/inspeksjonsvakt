@@ -92,7 +92,7 @@ function renderUnknownCodes() {
     : "Alle ansattkodene i planen har et navneoppslag.";
   $("unknownEditor").innerHTML = unknown.map(code => `
     <div class="unknown-field"><label for="map-${escapeHtml(code)}">${escapeHtml(code)}</label>
-      <input id="map-${escapeHtml(code)}" data-code="${escapeHtml(code)}" type="text" placeholder="Skriv inn fullt navn" value="">
+      <input id="map-${escapeHtml(code)}" data-code="${escapeHtml(code)}" type="text" placeholder="Etternavn, Fornavn – f.eks. Lie, Tore" value="">
     </div>`).join("") || '<p class="small-note">Ingen ukjente koder.</p>';
 }
 function personEntriesForDate(date, code) {
@@ -274,7 +274,7 @@ $("parsePdfBtn").addEventListener("click",async () => {
   button.disabled = true; button.textContent = "Leser PDF …";
   try {
     const result = await readPdfSchedule(selectedPdf);
-    plan = {...plan,entries:result.entries,startDate,updatedOn:result.updatedOn || plan.updatedOn,source:selectedPdf.name,version:"1.2.1"};
+    plan = {...plan,entries:result.entries,startDate,updatedOn:result.updatedOn || plan.updatedOn,source:selectedPdf.name,version:"1.2.2"};
     renderAll();
     const unknown = getUnknownCodes();
     $("parseStatus").textContent = `Leste ${result.entries.length} inspeksjonsoppføringer fra ${result.pageCount} side(r). ${unknown.length ? `Uavklarte koder: ${unknown.join(", ")}.` : "Alle koder har navneoppslag."}\nKontroller ukeplanen, korriger eventuelle navnekoder og last ned plan.json når den er klar.`;

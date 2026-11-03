@@ -1,5 +1,5 @@
 {
-  "version": "1.2.1",
+  "version": "1.2.2",
   "school": "InspeksjonsVakt",
   "updatedOn": "2026-10-14",
   "startDate": "2026-10-19",
@@ -65,9 +65,9 @@
     "TRAE": "Træen, Elisabeth",
     "ØKLS": "Økland, Silje",
     "ØYSE": "Øysæd, Elisabeth",
-    "LIET": "Tore Lie",
-    "ROLT": "Tone Roll",
-    "BIRO": "Oda Birkeland"
+    "LIET": "Lie, Tore",
+    "ROLT": "Roll, Tone",
+    "BIRO": "Birkeland, Oda"
   },
   "areas": [
     "Paradis øvre",

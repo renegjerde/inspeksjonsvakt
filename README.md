@@ -1,4 +1,4 @@
-# InspeksjonsVakt v1.2.1
+# InspeksjonsVakt v1.2.2
 
 Mobilvennlig webapp for å vise den enkeltes inspeksjoner, med ukeoversikt og neste inspeksjon.
 
@@ -8,10 +8,11 @@ Mobilvennlig webapp for å vise den enkeltes inspeksjoner, med ukeoversikt og ne
 - `app.js` – logikk, ukevisning og PDF-lesing
 - `plan.json` – inspeksjonsplanen som er lest fra PDF-en fra 19.10.2026
 
-## Hva er nytt i v1.2.1
-- Lagt til de bekreftede navneoppslagene `BIRO` = Oda Birkeland, `LIET` = Tore Lie og `ROLT` = Tone Roll.
-- Alle ansattkodene i den innlastede inspeksjonsplanen har nå et navneoppslag.
-- Versjonsnummer oppdatert til v1.2.1.
+## Hva er nytt i v1.2.2
+- Alle personnavn vises i formatet `Etternavn, Fornavn`, i tråd med inspeksjonsplanen.
+- Bekreftede oppslag: `BIRO` = Birkeland, Oda; `LIET` = Lie, Tore; `ROLT` = Roll, Tone.
+- Alle ansattkodene i den innlastede inspeksjonsplanen har et navneoppslag.
+- Versjonsnummer oppdatert til v1.2.2.
 
 ## Funksjoner i appen
 - Personlig ukeplan mandag–fredag for valgt ansatt.
